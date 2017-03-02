@@ -11,4 +11,15 @@ MANIFEST
 !requirements.txt
 home/
 .idea/
-
+.temp/
+BUILD/
+F7_Ethernet/
+mbed/
+mbed-dev/
+mbed-rtos
+*.lib
+*.bld
+*.py
+.mbed
+USBDevice/
+mbed-os/

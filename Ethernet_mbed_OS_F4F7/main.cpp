@@ -1,16 +1,15 @@
 #include "mbed.h"
-#include "UDPSocket.h"
+//#include "UDPSocket.h"
 //#include "lwip-interface/EthernetInterface.h"
 #include "EthernetInterface.h"
 #include "SocketAddress.h"
-#include <math.h>
 
 // own stuff
 #include "defines.h"
 #include "config.h"
 #include "types.h"
 #include "controllers.h"
-//#include "functionGenerator.h"
+#include "signal_generator.h"
 
 
 #define SERVER_IP      "192.168.0.133"
@@ -38,7 +37,8 @@ Timer debugTimer;
 
 EthernetInterface eth;
 UDPSocket socket;
-SocketAddress udp_server_address("192.168.0.133", 10000);
+SocketAddress udp_server_address(SERVER_IP, PORT);
+SocketAddress dump_address(SERVER_IP, PORT);
 
 
 
@@ -61,36 +61,42 @@ int sensorMapping[SENSOR_COUNT][2] =
 // storage for sensor values
 float sensorValues[SENSOR_COUNT] = {0.0f};
 
-// storage for parameters to be send like sensor channels
-float fastParameterValues[FAST_PARAMETER_COUNT] = {0.0f};
+// storage for channels
+float channels[AVAILABLE_CHANNEL_COUNT] = {0.0f};
 
 // storage for parameters, that could be set from the pc
-float controlledParameterValues[CONTROLLED_PARAMETER_COUNT] = {0.0f};
+float parameters[AVAILABLE_PARAMETER_COUNT] = {0.0f};
+
 // a buffer for incoming messages
-float receivedParameters[REQUESTED_CONTROLLED_PARAMETER_COUNT] = {0.0f};
+//float receivedParameters[REQUESTED_PARAMETER_COUNT] = {0.0f};
 
 // set points array for the set point generator (TODO)
 float setPoints[5] = { 0.0f };
 
-struct messageOut messageToSend;
-struct messageIn messageReceived;
+MessageOut messageOutBuffer;
+MessageIn messageInBuffer;
+
 int dutyCycleFinishTime = 0;
 float pwmPerc = 0.0;
 int parameterSendCounter = 0;
 int receivedBytesCount = 0;
 int sendBytesCount = 0;
 int loopCounter = 0;
-bool diracInProgress = false;
 
+// initialize parameters for a PID controller
+PidParameters pidOneParameters;
+float pidOneIntervalLength = (float)LOOP_CYCLE_TIME_US / 1000000.0f;
 
+// initialize parameters for a signal generator
+SignalGeneratorParameters signalGeneratorOneParams;
 
 
 // ----------------------    function prototypes    ----------------------------
 void init();
 void loop();
 void aquireSensordata();
+void prepareMessage();
 void communicate();
-float generateSetPoint(float time);
 int actuate();
 
 
@@ -155,12 +161,53 @@ void init()
 
 
     // only for testing, set some initial values for controlledParameters
-    controlledParameterValues[SLOW_PWM_ON] = 1.0f;
-    controlledParameterValues[SLOW_PWM_PERCENT] = 0.5f;
+    parameters[SLOW_PWM_ON] = 1.0f;
+    parameters[SLOW_PWM_PERCENT] = 0.5f;
 
     // the timer is used for duty cycle duration measurement
     dutyCycleTimer.reset();
     dutyCycleTimer.start();
+
+
+    pidOneParameters.error          = &channels[PID1_ERROR];
+    pidOneParameters.kpSwitch       = &parameters[PID1_KP_SWITCH];
+    pidOneParameters.kpValue        = &parameters[PID1_KP_VALUE];
+    pidOneParameters.pPortion       = &channels[PID1_P_PORTION];
+    pidOneParameters.kiValue        = &parameters[PID1_KI_VALUE];
+    pidOneParameters.kiSwitch       = &parameters[PID1_KI_SWITCH];
+    pidOneParameters.integral       = &channels[PID1_INTEGRAL];
+    pidOneParameters.iPortion       = &channels[PID1_I_PORTION];
+    pidOneParameters.kdSwitch       = &parameters[PID1_KD_SWITCH];
+    pidOneParameters.kdValue        = &parameters[PID1_KD_VALUE];
+    pidOneParameters.lastError      = &channels[PID1_LAST_ERROR];
+    pidOneParameters.intervalLength = &pidOneIntervalLength;
+    pidOneParameters.dPortion       = &channels[PID1_D_PORTION];
+    pidOneParameters.setPoint       = &channels[PID1_SET_POINT];
+
+
+    signalGeneratorOneParams.generatorNumber    = &parameters[SP_GEN1_NUMBER];
+    signalGeneratorOneParams.diracStartTime     = &parameters[SP_GEN1_DIRAC_START_TIME];
+    signalGeneratorOneParams.diracNow           = &parameters[SP_GEN1_DIRAC_NOW];
+    signalGeneratorOneParams.diracLow           = &parameters[SP_GEN1_DIRAC_LOW];
+    signalGeneratorOneParams.diracHigh          = &parameters[SP_GEN1_DIRAC_HIGH];
+    signalGeneratorOneParams.diracDuration      = &parameters[SP_GEN1_DIRAC_DURATION];
+    signalGeneratorOneParams.stepState          = &parameters[SP_GEN1_STEP_STATE];
+    signalGeneratorOneParams.stepLow            = &parameters[SP_GEN1_STEP_LOW];
+    signalGeneratorOneParams.stepHigh           = &parameters[SP_GEN1_STEP_HIGH];
+    signalGeneratorOneParams.rampStartTime      = &parameters[SP_GEN1_RAMP_START_TIME];
+    signalGeneratorOneParams.rampState          = &parameters[SP_GEN1_RAMP_STATE];
+    signalGeneratorOneParams.rampLastState      = &parameters[SP_GEN1_RAMP_LAST_STATE];
+    signalGeneratorOneParams.rampGradient       = &parameters[SP_GEN1_RAMP_GRADIENT];
+    signalGeneratorOneParams.rampLow            = &parameters[SP_GEN1_RAMP_LOW];
+    signalGeneratorOneParams.rampHigh           = &parameters[SP_GEN1_RAMP_HIGH];
+    signalGeneratorOneParams.sinusAmplitude     = &parameters[SP_GEN1_SIN_AMPLITUDE];
+    signalGeneratorOneParams.sinusOmega         = &parameters[SP_GEN1_SIN_OMEGA];
+    signalGeneratorOneParams.sinusOffset        = &parameters[SP_GEN1_SIN_OFFSET];
+    signalGeneratorOneParams.squareLow          = &parameters[SP_GEN1_SQUARE_LOW];
+    signalGeneratorOneParams.squareHigh         = &parameters[SP_GEN1_SQUARE_HIGH];
+    signalGeneratorOneParams.squareFrequency    = &parameters[SP_GEN1_SQUARE_FREQUENCY];
+    signalGeneratorOneParams.squareState        = &parameters[SP_GEN1_SQUARE_STATE];
+    signalGeneratorOneParams.squareLastToggle   = &parameters[SP_GEN1_SQUARE_LAST_TOGGLE];
 
 }
 
@@ -178,22 +225,22 @@ void loop()
     }
 
     // Calculate duration of last duty cycle
-    // at this point the startTime of the last loop is still stored in messageToSend.loopStartTime
-    messageToSend.lastLoopDuration = dutyCycleFinishTime - messageToSend.loopStartTime;
-    fastParameterValues[LOOP_DURATION] = messageToSend.lastLoopDuration;
+    // at this point the startTime of the last loop is still stored in messageOutBufferloopStartTime
+    messageOutBuffer.lastLoopDuration = dutyCycleFinishTime - messageOutBuffer.loopStartTime;
+    channels[LOOP_DURATION] = messageOutBuffer.lastLoopDuration;
 
 
-    // now overwrite messageToSend.loopStartTime with the actual loop start time
-    messageToSend.loopStartTime = dutyCycleTimer.read_us();
+    // now overwrite messageOutBuffer.loopStartTime with the actual loop start time
+    messageOutBuffer.loopStartTime = dutyCycleTimer.read_us();
 
     // the dutyCycleTimer is not set to 0 on start of a loop, because the pc
     // needs an absolute time for sorting and plotting the sensor values
     // TODO - check what happens on timer overflow (after approx. 30min)
 
     // PWM output controlled by pc for little testing
-    if (controlledParameterValues[SLOW_PWM_ON] > 0.5f)
+    if (parameters[SLOW_PWM_ON] > 0.5f)
     {
-        pwmGenerator.write(controlledParameterValues[SLOW_PWM_PERCENT]);
+        pwmGenerator.write(parameters[SLOW_PWM_PERCENT]);
     }
     else
     {
@@ -203,41 +250,26 @@ void loop()
 
     // for debugging - store a controlledParameter value in fastParameters
     // to be able to plot the value on the pc
-    fastParameterValues[FAST_PWM_ON] = controlledParameterValues[SLOW_PWM_ON];
-    fastParameterValues[FAST_PWM_PERCENT] = controlledParameterValues[SLOW_PWM_PERCENT];
+    channels[FAST_PWM_ON] = parameters[SLOW_PWM_ON];
+    channels[FAST_PWM_PERCENT] = parameters[SLOW_PWM_PERCENT];
 
 
     // read all sensors
     aquireSensordata();
 
-    // get all set points
-    setPoints[0] = generateSetPoint((float)messageToSend.loopStartTime / 1000000.0f);
+    // get a set point
+    signalGeneratorOneParams.timeInS = ((float)messageOutBuffer.loopStartTime / 1000000.0f);
+    setPoints[0] = generateSignal(&signalGeneratorOneParams);
+    channels[SP_GEN_1_OUTPUT] = setPoints[0];
 
     // control a tank level or so
-    fastParameterValues[PID1_ERROR] = setPoints[0] - sensorValues[3];
-
-    float intervalLength = (float)LOOP_CYCLE_TIME_US / 1000000.0f;
-
-    PID_Controller(
-        &fastParameterValues[PID1_ERROR],
-        &controlledParameterValues[PID1_KP_SWITCH],
-        &controlledParameterValues[PID1_KP_VALUE],
-        &fastParameterValues[PID1_P_PORTION],
-        &controlledParameterValues[PID1_KI_SWITCH],
-        &controlledParameterValues[PID1_KI_VALUE],
-        &fastParameterValues[PID1_INTEGRAL],
-        &fastParameterValues[PID1_I_PORTION],
-        &controlledParameterValues[PID1_KD_SWITCH],
-        &controlledParameterValues[PID1_KD_VALUE],
-        &fastParameterValues[PID1_LAST_ERROR],
-        &intervalLength,
-        &fastParameterValues[PID1_D_PORTION],
-        &fastParameterValues[PID1_SET_POINT]
-    );
+    channels[PID1_ERROR] = setPoints[0] - sensorValues[3];
+    PID_Controller(&pidOneParameters);
 
 
     actuate();
 
+    prepareMessage();
     communicate();
 
     // store the time for loop duration measurement
@@ -261,22 +293,22 @@ void aquireSensordata()
                 switch (i)
                 {
                     case 0:
-                        fastParameterValues[ANALOG_IN_0] = sensorValues[i];
+                        channels[ANALOG_IN_0] = sensorValues[i];
                         break;
                     case 1:
-                        fastParameterValues[ANALOG_IN_1] = sensorValues[i];
+                        channels[ANALOG_IN_1] = sensorValues[i];
                         break;
                     case 2:
-                        fastParameterValues[ANALOG_IN_2] = sensorValues[i];
+                        channels[ANALOG_IN_2] = sensorValues[i];
                         break;
                     case 3:
-                        fastParameterValues[ANALOG_IN_3] = sensorValues[i];
+                        channels[ANALOG_IN_3] = sensorValues[i];
                         break;
                     case 4:
-                        fastParameterValues[ANALOG_IN_4] = sensorValues[i];
+                        channels[ANALOG_IN_4] = sensorValues[i];
                         break;
                     case 5:
-                        fastParameterValues[ANALOG_IN_5] = sensorValues[i];
+                        channels[ANALOG_IN_5] = sensorValues[i];
                         break;
                 }
                 break;
@@ -288,238 +320,75 @@ void aquireSensordata()
     }
 }
 
-
-void communicate()
+void prepareMessage()
 {
     // map all requested data to the outgoing message struct
+    // loopStartTime and lastLoopDuration are allready set from within the loop
 
+    // map channels
     int i;
-
-//    // map sensor values
-//    int n = 0;
-//    for (i = 0; i < SENSOR_COUNT; i++)
-//    {
-//        messageToSend.measuredValues[n] = sensorValues[i];
-//        n += 1;
-//    }
-
-    // map fast parameters
-    for (i = 0; i < REQUESTED_FAST_PARAMETER_COUNT; i++)
+    for (i = 0; i < REQUESTED_CHANNEL_COUNT; i++)
     {
-        messageToSend.fastParameterValues[i] = fastParameterValues[requestedFastParameters[i]];
+        messageOutBuffer.channels[i] = channels[requestedChannels[i]];
     }
 
-    // map controlled (rotating) parameters
+    // map rotating parameters
     // on each cycle, only one of the "controlled parameters" is send to the pc
-    messageToSend.parameterNumber = parameterSendCounter;
-    //messageToSend.parameterValue = controlledParameterValues[requestedControlledParameters[parameterSendCounter]];
-    messageToSend.parameterValue = controlledParameterValues[parameterSendCounter];
+    messageOutBuffer.parameterNumber = parameterSendCounter;
+    //messageOutBuffer.parameterValue = parameters[requestedControlledParameters[parameterSendCounter]];
+    messageOutBuffer.parameterValue = parameters[parameterSendCounter];
 
     // increment the counter for sending the "slow parameters"
     parameterSendCounter += 1;
-    if (parameterSendCounter >= CONTROLLED_PARAMETER_COUNT)
+    if (parameterSendCounter >= AVAILABLE_PARAMETER_COUNT)
     {
         parameterSendCounter = 0;
     }
+}
 
-
+void communicate()
+{
+    // for debugging
     blueLed = 0;
     redLed = 0;
 
-
-
-
-    // loopStartTime and lastLoopDuration are allready set from within the loop
-
-    // send sensor data to the pc via Ethernet with mbed os
-    sendBytesCount = socket.sendto(udp_server_address, (char *)&messageToSend, sizeof(messageToSend));
+    // send data to the pc via Ethernet with mbed os
+    sendBytesCount = socket.sendto(udp_server_address, (char *)&messageOutBuffer, sizeof(messageOutBuffer));
 
     #ifdef DEBUG
-    pc.printf("SEND: %d %d %f\n", sendBytesCount, messageToSend.parameterNumber, messageToSend.parameterValue);
+    pc.printf("SEND: %d %d %f\n", sendBytesCount, messageOutBuffer.parameterNumber, messageOutBuffer.parameterValue);
     #endif
-
-
-    debugTimer.reset();
-    debugTimer.start();
-
-
 
     // receive a command
-    fastParameterValues[RECEIVED_BYTES_COUNT] = (float)socket.recvfrom(&udp_server_address, (char *)&messageReceived, sizeof(messageReceived));
+    debugTimer.reset();
+    debugTimer.start();
+    channels[RECEIVED_BYTES_COUNT] = (float)socket.recvfrom(&dump_address, (char *)&messageInBuffer, sizeof(messageInBuffer));
+    channels[DEBUG_TIMER] = (float)debugTimer.read_us();
 
-    fastParameterValues[DEBUG_TIMER] = (float)debugTimer.read_us();
-
-
-
-    if (fastParameterValues[RECEIVED_BYTES_COUNT] > 0.5f)
+    // if a command has been received
+    if (channels[RECEIVED_BYTES_COUNT] > 0.5f)
     {
-        controlledParameterValues[messageReceived.parameterNumber] = messageReceived.value;
+        parameters[messageInBuffer.parameterNumber] = messageInBuffer.value;
 
-        fastParameterValues[LAST_COMMAND_ID] = messageReceived.parameterNumber;
-        fastParameterValues[LAST_COMMAND_VALUE] = messageReceived.value;
-    }
-    fastParameterValues[LAST_COMMAND_FROM_ARRAY_VALUE] = controlledParameterValues[messageReceived.parameterNumber];
-
-
-
-
-    #ifdef DEBUG
-    pc.printf("RECV: %f %d %f\n", fastParameterValues[RECEIVED_BYTES_COUNT], messageReceived.parameterNumber, messageReceived.value);
-    #endif
-
-    if (fastParameterValues[RECEIVED_BYTES_COUNT] > 0)
-    {
+        // for debugging
+        channels[LAST_COMMAND_ID] = messageInBuffer.parameterNumber;
+        channels[LAST_COMMAND_VALUE] = messageInBuffer.value;
         // blue led blinkiblinki on successfull receive
         blueLed = 1;
-
-        #ifdef DEBUG
-        pc.printf("SET: %f %d %f\n", fastParameterValues[RECEIVED_BYTES_COUNT], messageReceived.parameterNumber, params[messageReceived.parameterNumber]);
-        #endif
     }
     else
     {
         // red led blinkiblinki on nothing received
         redLed = 1;
     }
+
+    // for debugging
+    channels[LAST_COMMAND_FROM_ARRAY_VALUE] = parameters[messageInBuffer.parameterNumber];
+
+    #ifdef DEBUG
+    pc.printf("RECV: %f %d %f\n", channels[RECEIVED_BYTES_COUNT], messageInBuffer.parameterNumber, messageInBuffer.value);
+    #endif
 }
-
-
-// not yet tested
-float generateSetPoint(float timeInS)
-{
-    float setPoint = 0.0f;
-
-    switch ((int)(controlledParameterValues[SP_GEN1_NUMBER] + 0.5f))
-    {
-        case 0:
-            // generates a dirac impulse
-            if ((controlledParameterValues[SP_GEN1_DIRAC_NOW] > 0.5f))
-            {
-                controlledParameterValues[SP_GEN1_DIRAC_START_TIME] = (float)timeInS;
-                controlledParameterValues[SP_GEN1_DIRAC_NOW] = 0.0f;
-            }
-
-            if ((float)timeInS - controlledParameterValues[SP_GEN1_DIRAC_START_TIME] < controlledParameterValues[SP_GEN1_DIRAC_DURATION])
-            {
-                setPoint = controlledParameterValues[SP_GEN1_DIRAC_HIGH];
-            }
-            else
-            {
-                setPoint = controlledParameterValues[SP_GEN1_DIRAC_LOW];
-            }
-
-            break;
-
-        case 1:
-            // generates a heaviside function
-            if (controlledParameterValues[SP_GEN1_STEP_STATE] > 0.5f)
-            {
-                setPoint = controlledParameterValues[SP_GEN1_STEP_HIGH];
-            }
-            else
-            {
-                setPoint = controlledParameterValues[SP_GEN1_STEP_LOW];
-            }
-            break;
-
-        case 2:
-            // generates a ramp
-
-            // if ramp gets toggled between upslope and downslope
-            if (controlledParameterValues[SP_GEN1_RAMP_STATE] != controlledParameterValues[SP_GEN1_RAMP_LAST_STATE])
-            {
-                controlledParameterValues[SP_GEN1_RAMP_LAST_STATE] = controlledParameterValues[SP_GEN1_RAMP_STATE];
-                controlledParameterValues[SP_GEN1_RAMP_START_TIME] = timeInS;
-            }
-
-            if ((controlledParameterValues[SP_GEN1_RAMP_GRADIENT] == 0.0f) || (timeInS == 0.0f))
-            {
-                setPoint = 0.0f;
-                break;
-            }
-
-            // if upslope wanted
-            if (controlledParameterValues[SP_GEN1_RAMP_STATE] < 0.5f)
-            {
-                float offset = (controlledParameterValues[SP_GEN1_RAMP_LOW]) -
-                    (controlledParameterValues[SP_GEN1_RAMP_GRADIENT] * controlledParameterValues[SP_GEN1_RAMP_START_TIME]);
-
-                float rampValue = controlledParameterValues[SP_GEN1_RAMP_GRADIENT] * timeInS + offset;
-
-
-                if (rampValue > controlledParameterValues[SP_GEN1_RAMP_HIGH])
-                {
-                    setPoint = controlledParameterValues[SP_GEN1_RAMP_HIGH];
-                }
-                else
-                {
-                    setPoint = rampValue;
-                }
-            }
-            // if downslope wanted -> the gradient must be multiplied by -1 !!
-            if (controlledParameterValues[SP_GEN1_RAMP_STATE] > 0.5f)
-            {
-                float offset = controlledParameterValues[SP_GEN1_RAMP_HIGH] +
-                    (controlledParameterValues[SP_GEN1_RAMP_GRADIENT] * controlledParameterValues[SP_GEN1_RAMP_START_TIME]);
-
-                float rampValue = -1.0f * controlledParameterValues[SP_GEN1_RAMP_GRADIENT] * timeInS + offset;
-
-
-                if (rampValue < controlledParameterValues[SP_GEN1_RAMP_LOW])
-                {
-                    setPoint = controlledParameterValues[SP_GEN1_RAMP_LOW];
-                }
-                else
-                {
-                    setPoint = rampValue;
-                }
-            }
-
-
-
-            break;
-
-        case 3:
-            // generates a sinus
-            setPoint = controlledParameterValues[SP_GEN1_SIN_AMPLITUDE] * (float)sin(controlledParameterValues[SP_GEN1_SIN_OMEGA] * timeInS) + controlledParameterValues[SP_GEN1_SIN_OFFSET];
-            break;
-
-        case 4:
-            // generates a square wave
-
-            // toggle between high and low
-            float half_T = 0.5f * (1.0f/controlledParameterValues[SP_GEN1_SQUARE_FREQUENCY]);
-
-            if (timeInS - controlledParameterValues[SP_GEN1_SQUARE_LAST_TOGGLE] > half_T)
-            {
-                controlledParameterValues[SP_GEN1_SQUARE_LAST_TOGGLE] = timeInS;
-                if (controlledParameterValues[SP_GEN1_SQUARE_STATE] < 0.5f)
-                {
-                    controlledParameterValues[SP_GEN1_SQUARE_STATE] = 1.0f;
-                }
-                else
-                {
-                    controlledParameterValues[SP_GEN1_SQUARE_STATE] = 0.0f;
-                }
-            }
-
-            // set high or low
-            if (controlledParameterValues[SP_GEN1_SQUARE_STATE] < 0.5f)
-            {
-                setPoint = controlledParameterValues[SP_GEN1_SQUARE_LOW];
-            }
-            else
-            {
-                setPoint = controlledParameterValues[SP_GEN1_SQUARE_HIGH];
-            }
-
-
-            break;
-    }
-    fastParameterValues[SP_GEN_1_OUTPUT] = setPoint;
-    return setPoint;
-}
-
 
 
 
