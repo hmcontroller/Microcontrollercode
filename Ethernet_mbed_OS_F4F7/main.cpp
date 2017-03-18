@@ -12,9 +12,11 @@
 #include "signal_generator.h"
 
 
-#define SERVER_IP      "192.168.0.133"
-#define PORT           10000
-
+#define SERVER_IP       "192.168.0.133"
+#define OWN_IP          "192.168.0.15"
+#define PORT            10000
+#define NET_MASK        "255.255.0.0"
+#define GATEWAY         "192.168.0.1"
 
 
 //#define DEBUG
@@ -147,6 +149,7 @@ void init()
     //// eth.init(&ownIP, &mask, &Gateway);
 
     // Ethernetconnection with DHCP
+    eth.set_network(OWN_IP, NET_MASK, GATEWAY);
     eth.connect();
     const char *ip = eth.get_ip_address();
     const char *mac = eth.get_mac_address();
@@ -353,7 +356,10 @@ void communicate()
     redLed = 0;
 
     // send data to the pc via Ethernet with mbed os
+    debugTimer.reset();
+    debugTimer.start();
     sendBytesCount = socket.sendto(udp_server_address, (char *)&messageOutBuffer, sizeof(messageOutBuffer));
+    channels[SEND_TIMER] = (float)debugTimer.read_us();
 
     #ifdef DEBUG
     pc.printf("SEND: %d %d %f\n", sendBytesCount, messageOutBuffer.parameterNumber, messageOutBuffer.parameterValue);
@@ -363,7 +369,7 @@ void communicate()
     debugTimer.reset();
     debugTimer.start();
     channels[RECEIVED_BYTES_COUNT] = (float)socket.recvfrom(&dump_address, (char *)&messageInBuffer, sizeof(messageInBuffer));
-    channels[DEBUG_TIMER] = (float)debugTimer.read_us();
+    channels[RECEIVE_TIMER] = (float)debugTimer.read_us();
 
     // if a command has been received
     if (channels[RECEIVED_BYTES_COUNT] > 0.5f)

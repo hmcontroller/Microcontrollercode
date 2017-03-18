@@ -2,7 +2,7 @@
 #include "USBHID.h"
 
 //We declare a USBHID device. Input out output reports have a length of 8 bytes
-USBHID hid(8, 8);
+USBHID hid(8, 64);
 
 //This report will contain data to be sent
 HID_REPORT send_report;

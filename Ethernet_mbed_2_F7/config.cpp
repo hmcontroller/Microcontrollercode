@@ -4,12 +4,15 @@ int requestedChannels[REQUESTED_CHANNEL_COUNT] = {
     ANALOG_IN_2,
     ANALOG_IN_3,
     PID1_ERROR,
-    PID1_SET_POINT,
+    FAST_PWM_ON,
+    FAST_PWM_PERCENT,
+    LOOP_DURATION,
+    RECEIVED_BYTES_COUNT,
     SP_GEN_1_OUTPUT,
-    DEBUG_TIMER,
-    SEND_TIMER,
-    RECEIVE_TIMER,
-    LOOP_DURATION
+    LAST_COMMAND_ID,
+    LAST_COMMAND_VALUE,
+    LAST_COMMAND_FROM_ARRAY_VALUE,
+    DEBUG_TIMER
 };
 
 // Parameters that can be set from the pc.
@@ -71,3 +74,4 @@ int requestedParameters[REQUESTED_PARAMETER_COUNT] = {
     SP_GEN2_RAMP_HIGH,
     PID1_SENSOR_SOURCE
 };
+

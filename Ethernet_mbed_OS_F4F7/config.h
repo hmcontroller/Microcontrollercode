@@ -3,8 +3,8 @@
 
 // must have parameters
 #define LOOP_CYCLE_TIME_US                         5000
-#define AVAILABLE_CHANNEL_COUNT                      30
-#define REQUESTED_CHANNEL_COUNT                      12
+#define AVAILABLE_CHANNEL_COUNT                      32
+#define REQUESTED_CHANNEL_COUNT                       9
 #define AVAILABLE_PARAMETER_COUNT                    62
 #define REQUESTED_PARAMETER_COUNT                    56
 
@@ -43,6 +43,8 @@
 #define LAST_COMMAND_VALUE                           27
 #define LAST_COMMAND_FROM_ARRAY_VALUE                28
 #define DEBUG_TIMER                                  29
+#define SEND_TIMER                                   30
+#define RECEIVE_TIMER                                31
 
 // all available parameters
 // Define names for parameters, that can be set from the connected pc.
