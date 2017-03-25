@@ -49,11 +49,11 @@ Endpoint endpoint_server_TX;
 // [0]: switchCase for aquisition method, see "void aquireSensordata()"
 // [1]: a parameter for the aquistion method
 #define SENSOR_COUNT 6
-int sensorMapping[SENSOR_COUNT][2] = 
+int sensorMapping[SENSOR_COUNT][2] =
 {
-    {1, 0}, 
-    {1, 1}, 
-    {1, 2}, 
+    {1, 0},
+    {1, 1},
+    {1, 2},
     {1, 3},
     {1, 4},
     {1, 5}
@@ -106,12 +106,12 @@ int actuate();
 int main()
 {
     init();
-    
+
     // gives the error "sys_sem_new create error", dont know why
     //// attach the main loop to a timer (ticker)
     // mainLoopTrigger.attach(&loop, 1.0);
     // while(1){}
-    
+
     // patch:
     while(1)
     {
@@ -130,32 +130,32 @@ void init()
     greenLed = 1;
     blueLed = 0;
     redLed = 0;
-    
+
     pc.printf("ControlDemonstrator\n");
-    
+
     pwmGenerator.period_us(100);
 
     // Bring up the network interface
-    
+
     // laut Dokumentation Initialisierung mit static IP eigentlich möglich bei mbed OS, geht aber nicht
     // es gibt wohl einen Branch von mbed mit einem Patch
     //// eth.init(&ownIP, &mask, &Gateway);
-    
+
 //    // Ethernetconnection with DHCP
 //    eth.connect();
 //    const char *ip = eth.get_ip_address();
 //    const char *mac = eth.get_mac_address();
 //    pc.printf("IP address is: %s\n", ip ? ip : "No IP");
 //    pc.printf("MAC address is: %s\n", mac ? mac : "No MAC");
-    
-    
+
+
     // Ethernetconnection with fixed IP and external library
     eth.init(OWN_IP, "255.255.255.0", "192.168.178.1");
     eth.connect();
     #ifdef DEBUG
     pc.printf("\nClient IP Address is %s \n", eth.getIPAddress());
     #endif
-    
+
 //    // This is for the external library (mbed classic)
 //    // Open a socket on the network interface
 //    socket.bind(SERVER_PORT);
@@ -181,15 +181,15 @@ void init()
     socketRX.bind(OWN_PORT_RX);
     socketRX.init();
     socketRX.set_blocking(false, 0);
-    
+
     socketTX.init();
     //socketTX.set_blocking(false, 0);
-    
+
     // this must be done AFTER the socket initialisation
     endpoint_server_RX.set_address(SERVER_IP, SERVER_PORT_RX);
     endpoint_server_TX.set_address(SERVER_IP, OWN_PORT_RX);
 
-    
+
     // only for testing, set some initial values for controlledParameters
     controlledParameterValues[SLOW_PWM_ON] = 1.0f;
     controlledParameterValues[SLOW_PWM_PERCENT] = 0.5f;
@@ -208,16 +208,16 @@ void loop()
         loopCounter = 0;
         greenLed = !greenLed;
     }
-    else 
-    {   
+    else
+    {
         loopCounter += 1;
     }
-    
+
     // Calculate duration of last duty cycle
     // at this point the startTime of the last loop is still stored in messageToSend.loopStartTime
     messageToSend.lastLoopDuration = dutyCycleFinishTime - messageToSend.loopStartTime;
     fastParameterValues[LOOP_DURATION] = messageToSend.lastLoopDuration;
-    
+
 
     // now overwrite messageToSend.loopStartTime with the actual loop start time
     messageToSend.loopStartTime = dutyCycleTimer.read_us();
@@ -225,15 +225,15 @@ void loop()
     // the dutyCycleTimer is not set to 0 on start of a loop, because the pc
     // needs an absolute time for sorting and plotting the sensor values
     // TODO - check what happens on timer overflow (after approx. 30min)
-   
+
     // PWM output controlled by pc for little testing
     if (controlledParameterValues[SLOW_PWM_ON] > 0.5f)
     {
-        pwmGenerator.write(controlledParameterValues[SLOW_PWM_PERCENT]);    
+        pwmGenerator.write(controlledParameterValues[SLOW_PWM_PERCENT]);
     }
     else
     {
-        pwmGenerator.write(0.0f);    
+        pwmGenerator.write(0.0f);
     }
 
 
@@ -242,8 +242,8 @@ void loop()
     fastParameterValues[FAST_PWM_ON] = controlledParameterValues[SLOW_PWM_ON];
     fastParameterValues[FAST_PWM_PERCENT] = controlledParameterValues[SLOW_PWM_PERCENT];
 
-    
-    // read all sensors    
+
+    // read all sensors
     aquireSensordata();
 
     // get all set points
@@ -251,9 +251,9 @@ void loop()
 
     // control a tank level or so
     fastParameterValues[PID1_ERROR] = setPoints[0] - sensorValues[3];
-    
+
     float intervalLength = (float)LOOP_CYCLE_TIME_US / 1000000.0f;
-    
+
     PID_Controller(
         &fastParameterValues[PID1_ERROR],
         &controlledParameterValues[PID1_KP_SWITCH],
@@ -275,7 +275,7 @@ void loop()
     actuate();
 
     communicate();
-    
+
     // store the time for loop duration measurement
     dutyCycleFinishTime = dutyCycleTimer.read_us();
 }
@@ -292,7 +292,7 @@ void aquireSensordata()
             // read builtin ADC
             case 1:
                 sensorValues[i] = availableADCs[sensorMapping[i][1]].read_u16();
-                
+
                 // refactor this dirty hack
                 switch (i)
                 {
@@ -316,7 +316,7 @@ void aquireSensordata()
                         break;
                 }
                 break;
-            
+
             // implement alternate measuring method here
             case 2:
                 break;
@@ -328,7 +328,7 @@ void aquireSensordata()
 void communicate()
 {
     // map all requested data to the outgoing message struct
-    
+
     int i;
 
 //    // map sensor values
@@ -338,19 +338,19 @@ void communicate()
 //        messageToSend.measuredValues[n] = sensorValues[i];
 //        n += 1;
 //    }
-    
+
     // map fast parameters
     for (i = 0; i < REQUESTED_FAST_PARAMETER_COUNT; i++)
     {
         messageToSend.fastParameterValues[i] = fastParameterValues[requestedFastParameters[i]];
     }
-    
+
     // map controlled (rotating) parameters
     // on each cycle, only one of the "controlled parameters" is send to the pc
     messageToSend.parameterNumber = parameterSendCounter;
     //messageToSend.parameterValue = controlledParameterValues[requestedControlledParameters[parameterSendCounter]];
     messageToSend.parameterValue = controlledParameterValues[parameterSendCounter];
-    
+
     // increment the counter for sending the "slow parameters"
     parameterSendCounter += 1;
     if (parameterSendCounter >= CONTROLLED_PARAMETER_COUNT)
@@ -366,7 +366,7 @@ void communicate()
 
 
     // loopStartTime and lastLoopDuration are allready set from within the loop
-    
+
     // send sensor data to the pc via Ethernet with mbed classic
     sendBytesCount = socketTX.sendTo(endpoint_server_RX, (char *)&messageToSend, sizeof(messageToSend));
 
@@ -378,12 +378,12 @@ void communicate()
     pc.printf("SEND: %d %d %f\n", sendBytesCount, messageToSend.parameterNumber, messageToSend.parameterValue);
     #endif
 
-    
+
     debugTimer.reset();
     debugTimer.start();
 
-    
-    
+
+
 //    // listen to the pc with mbed classic - receive all commands at once
 //    fastParameterValues[RECEIVED_BYTES_COUNT] = (float)socketRX.receiveFrom(endpoint_server_TX, (char *)&receivedParameters, sizeof(receivedParameters));
 
@@ -394,7 +394,7 @@ void communicate()
     fastParameterValues[DEBUG_TIMER] = (float)debugTimer.read_us();
 
 
-    
+
     if (fastParameterValues[RECEIVED_BYTES_COUNT] > 0.5f)
     {
         controlledParameterValues[messageReceived.parameterNumber] = messageReceived.value;
@@ -405,7 +405,7 @@ void communicate()
     fastParameterValues[LAST_COMMAND_FROM_ARRAY_VALUE] = controlledParameterValues[messageReceived.parameterNumber];
 
 
-    
+
 
 
     // receive bytes from socket while buffer is not empty - TODO
@@ -413,7 +413,7 @@ void communicate()
     // listen to the pc with mbed OS
     // ACHTUNG: hier server_adress als pointer übergeben
     // fastParameterValues[RECEIVED_BYTES_COUNT] = (float)socketRX.recvfrom(&udp_server_address_TX, &receivedParameters, sizeof(receivedParameters));
-    
+
 
     #ifdef DEBUG
     pc.printf("RECV: %f %d %f\n", fastParameterValues[RECEIVED_BYTES_COUNT], messageReceived.parameterNumber, messageReceived.value);
@@ -429,7 +429,7 @@ void communicate()
 
         // blue led blinkiblinki on successfull receive
         blueLed = 1;
-        
+
         #ifdef DEBUG
         pc.printf("SET: %f %d %f\n", fastParameterValues[RECEIVED_BYTES_COUNT], messageReceived.parameterNumber, params[messageReceived.parameterNumber]);
         #endif
@@ -454,9 +454,9 @@ float generateSetPoint(float time)
             if ((controlledParameterValues[SP_GEN1_DIRAC_NOW] > 0.5f))
             {
                 controlledParameterValues[SP_GEN1_DIRAC_START_TIME] = (float)time;
-                controlledParameterValues[SP_GEN1_DIRAC_NOW] = 0.0f;               
+                controlledParameterValues[SP_GEN1_DIRAC_NOW] = 0.0f;
             }
-            
+
             if ((float)time - controlledParameterValues[SP_GEN1_DIRAC_START_TIME] < controlledParameterValues[SP_GEN1_DIRAC_DURATION])
             {
                 setPoint = controlledParameterValues[SP_GEN1_DIRAC_HIGH];
@@ -465,7 +465,7 @@ float generateSetPoint(float time)
             {
                 setPoint = controlledParameterValues[SP_GEN1_DIRAC_LOW];
             }
-            
+
             break;
 
         case 1:
@@ -479,7 +479,7 @@ float generateSetPoint(float time)
                 setPoint = controlledParameterValues[SP_GEN1_STEP_LOW];
             }
             break;
-            
+
         case 2:
             // generates a ramp
             break;
@@ -494,7 +494,7 @@ float generateSetPoint(float time)
             break;
     }
     fastParameterValues[SP_GEN_1_OUTPUT] = setPoint;
-    return setPoint;     
+    return setPoint;
 }
 
 
@@ -504,5 +504,5 @@ float generateSetPoint(float time)
 int actuate()
 {
     //pwmGenerator.write(0.5f);
-    return -1;      
+    return -1;
 }
