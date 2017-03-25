@@ -3,20 +3,6 @@
 
 #include <config.h>
 
-typedef struct MessageOut
-{
-    int loopStartTime;
-    int lastLoopDuration;
-    int parameterNumber;
-    float parameterValue;
-    float channels[REQUESTED_CHANNEL_COUNT];
-} MessageOut;
-
-typedef struct MessageIn
-{
-    int parameterNumber;
-    float value;
-} MessageIn;
 
 typedef struct PidParameters
 {
