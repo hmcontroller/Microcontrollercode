@@ -1,48 +1,28 @@
 #include "controllers.h"
 
-
-
-
-// the classic PID
-void PID_Controller(
-        float *error,
-        float *kp_switch,
-        float *kp,
-        float *p_portion,
-        float *ki_switch,
-        float *ki,
-        float *integral,
-        float *i_portion,
-        float *kd_switch,
-        float *kd,
-        float *lastError, 
-        float *intervalLength,
-        float *d_portion,
-        float *setPoint
-    )
-
+void PID_Controller(PidParameters *params)
 {
     // prohibit divison by zero
-    if (*intervalLength == 0)
+    if (*(params->intervalLength) == 0)
     {
         return;
     }
-    
+
     // integrate the error
-    *integral += (*error * *intervalLength);
-    
+    *(params->integral) += (*(params->error) * *(params->intervalLength));
+
     // calculate proportional portion
-    *p_portion = *kp_switch * *kp * *error;
-    
+    *(params->pPortion) = *(params->kpSwitch) * *(params->kpValue) * *(params->error);
+
     // calculate integral portion
-    *i_portion = *ki_switch * *ki * *integral;
-    
+    *(params->iPortion) = *(params->kiSwitch) * *(params->kiValue) * *(params->integral);
+
     // calculate derivative portion
-    *d_portion = *kd_switch * *kd * ((*error - *lastError)/(*intervalLength));
-    
+    *(params->dPortion) = *(params->kdSwitch) * *(params->kdValue) * ((*(params->error) - *(params->lastError))/(*(params->intervalLength)));
+
     // calculate set point
-    *setPoint = *p_portion + *i_portion + *d_portion;
-    
+    *(params->setPoint) = *(params->pPortion) + *(params->iPortion) + *(params->dPortion);
+
     // save the new error for the next calculation
-    *lastError = *error;
+    *(params->lastError) = *(params->error);
 }
