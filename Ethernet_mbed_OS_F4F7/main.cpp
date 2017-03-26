@@ -156,6 +156,9 @@ void init()
     signalGeneratorOneParams.squareState        = &SP_GEN1_SQUARE_STATE;
     signalGeneratorOneParams.squareLastToggle   = &SP_GEN1_SQUARE_LAST_TOGGLE;
 
+    timeSinceStart.reset();
+    timeSinceStart.start();
+
 }
 
 void loop()

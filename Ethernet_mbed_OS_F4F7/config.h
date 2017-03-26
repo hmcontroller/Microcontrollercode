@@ -9,7 +9,7 @@
 #define REQUESTED_PARAMETER_COUNT                    56
 
 void initControlDemonstrator();
-void prepareMessage();
+void prepareOutMessage();
 void communicate();
 void sendMessage();
 void receiveMessage();
@@ -18,7 +18,10 @@ void receiveMessage();
 extern float channels[AVAILABLE_CHANNEL_COUNT];
 
 // storage for parameters, that could be set from the pc
-extern float parameters[AVAILABLE_PARAMETER_COUNT];
+extern float parameters[PARAMETER_COUNT];
+
+//int requestedChannels[REQUESTED_CHANNEL_COUNT];
+//extern int requestedParameters[REQUESTED_PARAMETER_COUNT];
 
 // All available channels
 // Define names for parameters, that can be send to the connected pc.
@@ -62,7 +65,7 @@ extern float parameters[AVAILABLE_PARAMETER_COUNT];
 // Define names for parameters, that can be set from the connected pc.
 // These names are referred to in the whole code.
 // The list is generated automatically from a python script.
-// On the controller all values are stored in "float parameters[AVAILABLE_PARAMETER_COUNT]."
+// On the controller all values are stored in "float parameters[PARAMETER_COUNT]."
 #define PID1_KP_SWITCH                           (parameters[0])
 #define PID1_KP_VALUE                            (parameters[1])
 #define PID1_KI_SWITCH                           (parameters[2])
@@ -126,8 +129,6 @@ extern float parameters[AVAILABLE_PARAMETER_COUNT];
 #define SP_GEN2_RAMP_HIGH                        (parameters[60])
 #define PID1_SENSOR_SOURCE                       (parameters[61])
 
-extern int requestedChannels[REQUESTED_CHANNEL_COUNT];
-extern int requestedParameters[REQUESTED_PARAMETER_COUNT];
 
 typedef struct MessageOut
 {

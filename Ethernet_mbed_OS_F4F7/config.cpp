@@ -28,7 +28,7 @@ DigitalOut redLed(LED3);
 float channels[AVAILABLE_CHANNEL_COUNT] = {0.0f};
 
 // storage for parameters, that could be set from the pc
-float parameters[AVAILABLE_PARAMETER_COUNT] = {0.0f};
+float parameters[PARAMETER_COUNT] = {0.0f};
 
 int parameterSendCounter = 0;
 int receivedBytesCount = 0;
@@ -40,76 +40,17 @@ MessageIn messageInBuffer;
 
 // Channel values that will be send to the pc at every loop cycle
 int requestedChannels[REQUESTED_CHANNEL_COUNT] = {
-    0,
-    1,
     2,
     3,
-    4,
-    5,
     6,
-    7,
-    8
-};
-
-// Parameters that can be set from the pc.
-int requestedParameters[REQUESTED_PARAMETER_COUNT] = {
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
     13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20,
-    21,
-    22,
-    23,
-    24,
     25,
-    26,
-    27,
-    28,
     29,
     30,
     31,
-    32,
-    33,
-    34,
-    35,
-    36,
-    37,
-    38,
-    39,
-    40,
-    41,
-    42,
-    43,
-    44,
-    45,
-    46,
-    47,
-    48,
-    49,
-    50,
-    51,
-    52,
-    53,
-    54,
-    55
+    21
 };
+
 
 
 void initControlDemonstrator()
@@ -140,7 +81,7 @@ void initControlDemonstrator()
 
 }
 
-void prepareMessage()
+void prepareOutMessage()
 {
     greenLed = 1;
     blueLed = 0;
@@ -156,17 +97,9 @@ void prepareMessage()
         messageOutBuffer.channels[i] = channels[requestedChannels[i]];
     }
 
-//    // Calculate duration of last duty cycle
-//    // at this point the startTime of the last loop is still stored in messageOutBufferloopStartTime
-//    messageOutBuffer.lastLoopDuration = dutyCycleFinishTime - messageOutBuffer.loopStartTime;
-//    LOOP_DURATION = messageOutBuffer.lastLoopDuration;
-
-
     // now overwrite messageOutBuffer.loopStartTime with the actual loop start time
     messageOutBuffer.loopStartTime = dutyCycleTimer.read_us();
 
-    // the dutyCycleTimer is not set to 0 on start of a loop, because the pc
-    // needs an absolute time for sorting and plotting the sensor values
     // TODO - check what happens on timer overflow (after approx. 30min)
 
 
@@ -180,15 +113,15 @@ void prepareMessage()
 
     // increment the counter for sending the "slow parameters"
     parameterSendCounter += 1;
-    if (parameterSendCounter >= AVAILABLE_PARAMETER_COUNT)
+    if (parameterSendCounter >= PARAMETER_COUNT)
     {
         parameterSendCounter = 0;
     }
 }
 
+
 void communicate()
 {
-    prepareMessage();
 
     // for debugging
     blueLed = 0;
@@ -200,6 +133,8 @@ void communicate()
 
 void sendMessage()
 {
+    prepareOutMessage();
+
     // send data to the pc via Ethernet with mbed os
     debugTimer.reset();
     debugTimer.start();
